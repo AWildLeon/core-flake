@@ -1,13 +1,12 @@
-{ glance-ical-events, ... }: {
+{ glance-ical-events, ... }:
+{
   imports = [
     ./traefik.nix
     ./nameserver.nix
     ./nginx.nix
     ./grafana.nix
     ./gitea.nix
-    ../helper/jail.nix
     ./glanceapp.nix
-    ./traefikmiddlewares/default.nix
     ./databases/mysql.nix
     ./recursivedns.nix
     ./bootserver.nix
