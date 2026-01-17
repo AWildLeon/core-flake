@@ -6,5 +6,7 @@ _: {
     ./router
     ./security
     ./cosmetic
+    ./roles
+    ../lib/helper
   ];
 }
