@@ -70,6 +70,12 @@
           {
             imports = [ ./modules ];
           };
+
+        nixosModules.role-base =
+          { ... }:
+          {
+            imports = [ ./roles/base ];
+          };
       };
     };
 }
