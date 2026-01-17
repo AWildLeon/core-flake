@@ -6,11 +6,8 @@
 {
 
   options.lh.router.dhcpRelay = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Enable DHCP Relay functionality on this router.";
-    };
+    enable = lib.mkEnableOption "Enable DHCP Relay functionality on this router.";
+
     interfaces = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
