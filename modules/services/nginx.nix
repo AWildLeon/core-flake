@@ -1,8 +1,10 @@
 { lib, config, ... }:
 
-let cfg = config.lh.services.nginx;
+let
+  cfg = config.lh.services.nginx;
 
-in {
+in
+{
   options.lh.services.nginx = {
     enable = lib.mkEnableOption "Nginx web server with recommended settings";
   };

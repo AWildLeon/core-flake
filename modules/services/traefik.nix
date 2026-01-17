@@ -1,13 +1,18 @@
-{ lib, config, options, pkgsUnstable, pkgs, ... }:
+{
+  lib,
+  config,
+  options,
+  pkgsUnstable,
+  pkgs,
+  ...
+}:
 with lib;
 let
 
   cfg = config.lh.services.traefik;
   # Pick the container runtime socket automatically
-  socketPath = if config.virtualisation.podman.enable then
-    "/run/podman/podman.sock"
-  else
-    "/var/run/docker.sock";
+  socketPath =
+    if config.virtualisation.podman.enable then "/run/podman/podman.sock" else "/var/run/docker.sock";
 
   # Where HAProxy will expose its own Unix listener for clients (curl, traefik, etc.)
   bindSocket = "/run/haproxy/docker-unpriv.sock";
@@ -92,27 +97,25 @@ let
   '';
 
   TraefikFormat = pkgs.formats.toml { };
-in {
+in
+{
   options = {
     lh.services.traefik = {
       enable = mkEnableOption "Traefik reverse proxy";
       environmentFiles = mkOption {
         type = types.listOf types.str;
         default = [ ];
-        description =
-          "List of environment files to load for Traefik configuration";
+        description = "List of environment files to load for Traefik configuration";
       };
       dataDir = mkOption {
         type = types.nullOr types.path;
         default = null;
-        description =
-          "Directory to store Traefik data files (certificates, etc.)";
+        description = "Directory to store Traefik data files (certificates, etc.)";
       };
       dynamicConfig = mkOption {
         inherit (TraefikFormat) type;
         default = { };
-        description =
-          "Dynamic configuration for Traefik (routers, services, middlewares)";
+        description = "Dynamic configuration for Traefik (routers, services, middlewares)";
       };
 
       cert_resolvers = mkOption {
@@ -135,249 +138,285 @@ in {
     };
   };
 
-  config = let
-    haveImpermanence = options ? environment && options.environment
-      ? persistence;
-    persistenceDef = if haveImpermanence then {
-      environment.persistence."/persistent".directories = [{
-        directory = "/var/lib/traefik";
-        user = "traefik";
-        group = "traefik";
-        mode = "u=rwx,g=,o=";
-      }] ++ optionals (cfg.dataDir != null) [{
-        directory = cfg.dataDir;
-        user = "traefik";
-        group = "traefik";
-        mode = "u=rwx,g=,o=";
-      }];
-    } else
-      { };
-  in mkIf cfg.enable (persistenceDef // {
-    users = {
+  config =
+    let
+      haveImpermanence = options ? environment && options.environment ? persistence;
+      persistenceDef =
+        if haveImpermanence then
+          {
+            environment.persistence."/persistent".directories = [
+              {
+                directory = "/var/lib/traefik";
+                user = "traefik";
+                group = "traefik";
+                mode = "u=rwx,g=,o=";
+              }
+            ]
+            ++ optionals (cfg.dataDir != null) [
+              {
+                directory = cfg.dataDir;
+                user = "traefik";
+                group = "traefik";
+                mode = "u=rwx,g=,o=";
+              }
+            ];
+          }
+        else
+          { };
+    in
+    mkIf cfg.enable (
+      persistenceDef
+      // {
+        users = {
 
-      users.traefik = {
-        isSystemUser = true;
-        group = "traefik";
-      };
-
-      groups.traefik = { gid = 9443; };
-    };
-    services = {
-
-      traefik = {
-        enable = true;
-        package = pkgsUnstable.traefik.overrideAttrs (oldAttrs: {
-          patches = (oldAttrs.patches or [ ]) ++ [
-            ./patches/traefik/sockets.patch # Fuck you Traefik for not listening to your users...
-          ];
-        });
-        staticConfigOptions = {
-          global = {
-            checkNewVersion = false;
-            sendAnonymousUsage = false;
+          users.traefik = {
+            isSystemUser = true;
+            group = "traefik";
           };
 
-          log = {
-            level = "INFO";
-            format = "common";
+          groups.traefik = {
+            gid = 9443;
           };
+        };
+        services = {
 
-          api = { dashboard = true; };
+          traefik = {
+            enable = true;
+            package = pkgsUnstable.traefik.overrideAttrs (oldAttrs: {
+              patches = (oldAttrs.patches or [ ]) ++ [
+                ./patches/traefik/sockets.patch # Fuck you Traefik for not listening to your users...
+              ];
+            });
+            staticConfigOptions = {
+              global = {
+                checkNewVersion = false;
+                sendAnonymousUsage = false;
+              };
 
-          entryPoints = {
-            web = {
-              address = ":80";
-              http = {
-                redirections = {
-                  entryPoint = {
-                    to = "websecure";
-                    scheme = "https";
+              log = {
+                level = "INFO";
+                format = "common";
+              };
+
+              api = {
+                dashboard = true;
+              };
+
+              entryPoints = {
+                web = {
+                  address = ":80";
+                  http = {
+                    redirections = {
+                      entryPoint = {
+                        to = "websecure";
+                        scheme = "https";
+                      };
+                    };
                   };
+                };
+                websecure = {
+                  address = ":443";
+                  http2 = {
+                    maxConcurrentStreams = 1000;
+                  };
+                  reusePort = true;
+                };
+              }
+              // cfg.additionalEntrypoints;
+
+              certificatesResolvers = mkIf (cfg.cert_resolvers != { }) cfg.cert_resolvers;
+
+              serversTransport = {
+                insecureSkipVerify = true; # Skip TLS verification for backend servers
+              };
+
+              providers = mkIf (config.virtualisation.docker.enable || config.virtualisation.podman.enable) {
+                docker = {
+                  endpoint = "unix://${bindSocket}";
+                  watch = true;
+                  exposedByDefault = false; # Only expose containers with labels
                 };
               };
             };
-            websecure = {
-              address = ":443";
-              http2 = { maxConcurrentStreams = 1000; };
-              reusePort = true;
-            };
-          } // cfg.additionalEntrypoints;
-
-          certificatesResolvers =
-            mkIf (cfg.cert_resolvers != { }) cfg.cert_resolvers;
-
-          serversTransport = {
-            insecureSkipVerify =
-              true; # Skip TLS verification for backend servers
+            dynamicConfigOptions = cfg.dynamicConfig;
+            inherit (cfg) environmentFiles;
           };
 
-          providers = mkIf (config.virtualisation.docker.enable
-            || config.virtualisation.podman.enable) {
-              docker = {
-                endpoint = "unix://${bindSocket}";
-                watch = true;
-                exposedByDefault = false; # Only expose containers with labels
+          # Only enable HAProxy when a container runtime is enabled
+          haproxy = mkIf (config.virtualisation.docker.enable || config.virtualisation.podman.enable) {
+            enable = true;
+            config = socketProxyConfig;
+
+            # Run as group 'docker' so it can talk to /var/run/docker.sock or /run/podman/podman.sock
+            group = "docker";
+          };
+        };
+
+        systemd = {
+          services = {
+            traefik = {
+              serviceConfig = {
+                PrivateDevices = true;
+                PrivateUsers = false;
+                ProcSubset = "pid";
+                ProtectControlGroups = true;
+                ProtectProc = "invisible";
+
+                ProtectKernelModules = true;
+                ProtectKernelTunables = true;
+                ProtectKernelLogs = true;
+                ProtectClock = true;
+                ProtectHostname = true;
+                RestrictSUIDSGID = true;
+                RestrictRealtime = true;
+                RestrictNamespaces = true;
+                ProtectSystem = lib.mkForce "strict";
+                ReadWritePaths = [
+                  cfg.dataDir
+                  "/var/lib/traefik"
+                ];
+                RemoveIPC = true;
+                LockPersonality = true;
+                MemoryDenyWriteExecute = true;
+                SystemCallArchitectures = "native";
+                SystemCallFilter = [
+                  "~@privileged"
+                  "~@cpu-emulation"
+                  "~@debug"
+                  "~@mount"
+                  "~@obsolete"
+                ];
+                SystemCallErrorNumber = "EPERM";
+                RestrictAddressFamilies = [
+                  "AF_UNIX"
+                  "AF_INET"
+                  "AF_INET6"
+                ];
+                AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
+                CapabilityBoundingSet = [ "CAP_NET_BIND_SERVICE" ];
+                UMask = "0077";
+
+                RootDirectory = "/run/jails/traefik";
+
+                MountAPIVFS = true;
+
+                BindReadOnlyPaths = [
+                  "/nix/store"
+                  "/etc/ssl"
+                  "/etc/resolv.conf"
+                  "/etc/hosts"
+                  "/run/current-system/sw/bin"
+                  "/run/wrappers/bin"
+                  "/etc/static/ssl"
+                ]
+                ++ optionals (config.virtualisation.docker.enable || config.virtualisation.podman.enable) [
+                  "/run/haproxy/"
+                ];
+                BindPaths = [
+                  "/var/lib/traefik:/var/lib/traefik"
+                ]
+                ++ optionals (cfg.dataDir != null) [ "${cfg.dataDir}:${cfg.dataDir}" ];
               };
             };
-        };
-        dynamicConfigOptions = cfg.dynamicConfig;
-        inherit (cfg) environmentFiles;
-      };
 
-      # Only enable HAProxy when a container runtime is enabled
-      haproxy = mkIf (config.virtualisation.docker.enable
-        || config.virtualisation.podman.enable) {
-          enable = true;
-          config = socketProxyConfig;
+            haproxy =
+              mkIf ((config.virtualisation.docker.enable || config.virtualisation.podman.enable) && cfg.enable)
+                {
+                  serviceConfig = {
+                    Environment = [
+                      # flip to 1 to allow those verbs/paths
+                      "POST=0"
+                      "ALLOW_RESTARTS=1"
+                      "ALLOW_START=1"
+                      "ALLOW_STOP=1"
+                      "AUTH=0"
+                      "BUILD=0"
+                      "COMMIT=0"
+                      "CONFIGS=0"
+                      "CONTAINERS=1"
+                      "DISTRIBUTION=0"
+                      "EVENTS=1"
+                      "EXEC=0"
+                      "GRPC=0"
+                      "IMAGES=1"
+                      "INFO=1"
+                      "NETWORKS=1"
+                      "NODES=0"
+                      "PING=1"
+                      "PLUGINS=0"
+                      "SECRETS=0"
+                      "SERVICES=0"
+                      "SESSION=0"
+                      "SWARM=0"
+                      "SYSTEM=0"
+                      "TASKS=0"
+                      "VERSION=1"
+                      "VOLUMES=1"
+                    ];
 
-          # Run as group 'docker' so it can talk to /var/run/docker.sock or /run/podman/podman.sock
-          group = "docker";
-        };
-    };
+                    ReadWritePaths = [ "/run/haproxy" ];
 
-    systemd = {
-      services = {
-        traefik = {
-          serviceConfig = {
-            PrivateDevices = true;
-            PrivateUsers = false;
-            ProcSubset = "pid";
-            ProtectControlGroups = true;
-            ProtectProc = "invisible";
+                    ProtectSystem = "strict";
+                    InaccessiblePaths = [
+                      "/root"
+                      "/home"
+                      "/docker"
+                    ];
 
-            ProtectKernelModules = true;
-            ProtectKernelTunables = true;
-            ProtectKernelLogs = true;
-            ProtectClock = true;
-            ProtectHostname = true;
-            RestrictSUIDSGID = true;
-            RestrictRealtime = true;
-            RestrictNamespaces = true;
-            ProtectSystem = lib.mkForce "strict";
-            ReadWritePaths = [ cfg.dataDir "/var/lib/traefik" ];
-            RemoveIPC = true;
-            LockPersonality = true;
-            MemoryDenyWriteExecute = true;
-            SystemCallArchitectures = "native";
-            SystemCallFilter = [
-              "~@privileged"
-              "~@cpu-emulation"
-              "~@debug"
-              "~@mount"
-              "~@obsolete"
-            ];
-            SystemCallErrorNumber = "EPERM";
-            RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
-            AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
-            CapabilityBoundingSet = [ "CAP_NET_BIND_SERVICE" ];
-            UMask = "0077";
+                    # Prozess-/Kernel-Isolation
+                    PrivateTmp = true;
+                    PrivateMounts = true;
+                    PrivateDevices = true;
+                    DevicePolicy = "closed";
+                    NoNewPrivileges = true;
+                    RestrictSUIDSGID = true;
+                    RestrictRealtime = true;
+                    RestrictNamespaces = true;
+                    LockPersonality = true;
+                    MemoryDenyWriteExecute = true;
 
-            RootDirectory = "/run/jails/traefik";
+                    ProtectProc = "invisible";
+                    ProcSubset = "pid";
+                    ProtectKernelModules = true;
+                    ProtectKernelTunables = true;
+                    ProtectKernelLogs = true;
+                    ProtectClock = true;
+                    ProtectHostname = true;
 
-            MountAPIVFS = true;
+                    # Syscalls einschränken
+                    SystemCallArchitectures = "native";
+                    SystemCallFilter = [ "@system-service" ];
+                    SystemCallErrorNumber = "EPERM";
 
-            BindReadOnlyPaths = [
-              "/nix/store"
-              "/etc/ssl"
-              "/etc/resolv.conf"
-              "/etc/hosts"
-              "/run/current-system/sw/bin"
-              "/run/wrappers/bin"
-              "/etc/static/ssl"
-            ] ++ optionals (config.virtualisation.docker.enable
-              || config.virtualisation.podman.enable) [ "/run/haproxy/" ];
-            BindPaths = [ "/var/lib/traefik:/var/lib/traefik" ]
-              ++ optionals (cfg.dataDir != null)
-              [ "${cfg.dataDir}:${cfg.dataDir}" ];
+                    # Nur UNIX-Sockets erlauben (Docker & dein bind-Socket)
+                    RestrictAddressFamilies = [
+                      "AF_UNIX"
+                      "AF_INET"
+                      "AF_INET6"
+                    ];
+
+                    # Keine Caps nötig solange kein Low-Port TCP gebunden wird
+                    CapabilityBoundingSet = [ ];
+                    AmbientCapabilities = [ ];
+
+                  };
+                };
+          };
+
+          tmpfiles.rules = config.lh.lib.mkJailTmpfiles {
+            serviceName = "traefik";
+            user = "traefik";
+            group = "traefik";
+            dataPaths = optionals (cfg.dataDir != null) [ "${cfg.dataDir}:${cfg.dataDir}" ];
           };
         };
-
-        haproxy = mkIf ((config.virtualisation.docker.enable
-          || config.virtualisation.podman.enable) && cfg.enable) {
-            serviceConfig = {
-              Environment = [
-                # flip to 1 to allow those verbs/paths
-                "POST=0"
-                "ALLOW_RESTARTS=1"
-                "ALLOW_START=1"
-                "ALLOW_STOP=1"
-                "AUTH=0"
-                "BUILD=0"
-                "COMMIT=0"
-                "CONFIGS=0"
-                "CONTAINERS=1"
-                "DISTRIBUTION=0"
-                "EVENTS=1"
-                "EXEC=0"
-                "GRPC=0"
-                "IMAGES=1"
-                "INFO=1"
-                "NETWORKS=1"
-                "NODES=0"
-                "PING=1"
-                "PLUGINS=0"
-                "SECRETS=0"
-                "SERVICES=0"
-                "SESSION=0"
-                "SWARM=0"
-                "SYSTEM=0"
-                "TASKS=0"
-                "VERSION=1"
-                "VOLUMES=1"
-              ];
-
-              ReadWritePaths = [ "/run/haproxy" ];
-
-              ProtectSystem = "strict";
-              InaccessiblePaths = [ "/root" "/home" "/docker" ];
-
-              # Prozess-/Kernel-Isolation
-              PrivateTmp = true;
-              PrivateMounts = true;
-              PrivateDevices = true;
-              DevicePolicy = "closed";
-              NoNewPrivileges = true;
-              RestrictSUIDSGID = true;
-              RestrictRealtime = true;
-              RestrictNamespaces = true;
-              LockPersonality = true;
-              MemoryDenyWriteExecute = true;
-
-              ProtectProc = "invisible";
-              ProcSubset = "pid";
-              ProtectKernelModules = true;
-              ProtectKernelTunables = true;
-              ProtectKernelLogs = true;
-              ProtectClock = true;
-              ProtectHostname = true;
-
-              # Syscalls einschränken
-              SystemCallArchitectures = "native";
-              SystemCallFilter = [ "@system-service" ];
-              SystemCallErrorNumber = "EPERM";
-
-              # Nur UNIX-Sockets erlauben (Docker & dein bind-Socket)
-              RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
-
-              # Keine Caps nötig solange kein Low-Port TCP gebunden wird
-              CapabilityBoundingSet = [ ];
-              AmbientCapabilities = [ ];
-
-            };
-          };
-      };
-
-      tmpfiles.rules = config.lh.lib.mkJailTmpfiles {
-        serviceName = "traefik";
-        user = "traefik";
-        group = "traefik";
-        dataPaths =
-          optionals (cfg.dataDir != null) [ "${cfg.dataDir}:${cfg.dataDir}" ];
-      };
-    };
-    networking.firewall = {
-      allowedTCPPorts = [ 80 443 ];
-      allowedUDPPorts = [ 443 ];
-    };
-  });
+        networking.firewall = {
+          allowedTCPPorts = [
+            80
+            443
+          ];
+          allowedUDPPorts = [ 443 ];
+        };
+      }
+    );
 }

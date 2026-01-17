@@ -1,13 +1,18 @@
-{ lib, config, options, ... }:
-let cfg = config.lh.services.gotify;
-in {
+{
+  lib,
+  config,
+  options,
+  ...
+}:
+let
+  cfg = config.lh.services.gotify;
+in
+{
   options.lh.services.gotify = {
     enable = lib.mkEnableOption "Gotify server";
     domain = lib.mkOption {
       type = lib.types.str;
-      default = "gotify.${
-          config.networking.fqdn or "${config.networking.hostName}.local"
-        }";
+      default = "gotify.${config.networking.fqdn or "${config.networking.hostName}.local"}";
       defaultText = lib.literalExpression ''
         "gotify.''${config.networking.fqdn or "''${config.networking.hostName}.local"}"
       '';
@@ -22,10 +27,11 @@ in {
       };
       certResolver = lib.mkOption {
         type = lib.types.str;
-        default = if config.lh.services.gotify.traefikIntegration.enable then
-          throw "You must set a certResolver if traefikIntegration is enabled"
-        else
-          "";
+        default =
+          if config.lh.services.gotify.traefikIntegration.enable then
+            throw "You must set a certResolver if traefikIntegration is enabled"
+          else
+            "";
         description = "The certResolver to use for the Gotify Traefik router";
         example = "le";
       };
@@ -33,18 +39,17 @@ in {
       middlewares = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description =
-          "A list of middlewares to apply to the Gotify Traefik router";
+        description = "A list of middlewares to apply to the Gotify Traefik router";
       };
     };
   };
   config = lib.mkIf cfg.enable {
-    assertions = [{
-      assertion = cfg.traefikIntegration.enable
-        -> cfg.traefikIntegration.certResolver != "";
-      message =
-        "certResolver must be set when traefik integration is enabled for Gotify";
-    }];
+    assertions = [
+      {
+        assertion = cfg.traefikIntegration.enable -> cfg.traefikIntegration.certResolver != "";
+        message = "certResolver must be set when traefik integration is enabled for Gotify";
+      }
+    ];
 
     services.gotify = {
       enable = true;
@@ -64,12 +69,10 @@ in {
         rule = "Host(`${cfg.domain}`)";
         entryPoints = [ "websecure" ];
         service = "gotify";
-        middlewares = [ "securityheaders" ]
-          ++ cfg.traefikIntegration.middlewares;
+        middlewares = [ "securityheaders" ] ++ cfg.traefikIntegration.middlewares;
         tls = { inherit (cfg.traefikIntegration) certResolver; };
       };
-      http.services.gotify.loadBalancer.servers =
-        [{ url = "http://127.51.67.1:51671"; }];
+      http.services.gotify.loadBalancer.servers = [ { url = "http://127.51.67.1:51671"; } ];
     };
     users = {
 
@@ -90,8 +93,10 @@ in {
           ProtectHome = true;
           ProtectSystem = lib.mkForce "strict";
           ReadOnlyPaths = [ "/etc" ];
-          ReadWritePaths =
-            [ "/var/lib/gotify-server" "/var/lib/private/gotify-server" ];
+          ReadWritePaths = [
+            "/var/lib/gotify-server"
+            "/var/lib/private/gotify-server"
+          ];
           BindReadOnlyPaths = [
             "/nix/store"
             "/etc/ssl"
@@ -101,8 +106,10 @@ in {
             "/run/wrappers/bin"
             "/etc/static/ssl"
           ];
-          BindPaths =
-            [ "/var/lib/gotify-server" "/var/lib/private/gotify-server" ];
+          BindPaths = [
+            "/var/lib/gotify-server"
+            "/var/lib/private/gotify-server"
+          ];
           MountAPIVFS = true;
           User = "gotify";
           Group = "gotify";
@@ -127,14 +134,20 @@ in {
             "~@resources"
             "~@swap"
           ];
-          RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+          RestrictAddressFamilies = [
+            "AF_INET"
+            "AF_INET6"
+          ];
           PrivateDevices = true;
           ProtectClock = true;
           ProtectKernelLogs = true;
           ProtectControlGroups = true;
           ProtectKernelModules = true;
           ProtectHostname = true;
-          IPAddressAllow = [ "127.0.0.0/8" "::1" ];
+          IPAddressAllow = [
+            "127.0.0.0/8"
+            "::1"
+          ];
           RestrictRealtime = true;
           ProtectKernelTunables = true;
           LockPersonality = true;
@@ -145,8 +158,10 @@ in {
         serviceName = "gotify";
         user = "gotify";
         group = "gotify";
-        dataPaths =
-          [ "/var/lib/gotify-server" "/var/lib/private/gotify-server" ];
+        dataPaths = [
+          "/var/lib/gotify-server"
+          "/var/lib/private/gotify-server"
+        ];
       };
     };
 

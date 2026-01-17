@@ -1,7 +1,14 @@
-{ pkgsUnstable, config, lib, ... }:
+{
+  pkgsUnstable,
+  config,
+  lib,
+  ...
+}:
 with lib;
-let cfg = config.lh.services.vaultwarden;
-in {
+let
+  cfg = config.lh.services.vaultwarden;
+in
+{
   options.lh.services.vaultwarden = {
     enable = mkOption {
       type = types.bool;
@@ -79,26 +86,24 @@ in {
 
       certResolver = lib.mkOption {
         type = lib.types.str;
-        default = if config.lh.services.vault.traefikIntegration.enable then
-          throw "You must set a certResolver if traefikIntegration is enabled"
-        else
-          "";
+        default =
+          if config.lh.services.vault.traefikIntegration.enable then
+            throw "You must set a certResolver if traefikIntegration is enabled"
+          else
+            "";
         description = "The certResolver to use for the vault Traefik router";
         example = "le";
       };
       middlewares = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description =
-          "A list of middlewares to apply to the vault Traefik router";
+        description = "A list of middlewares to apply to the vault Traefik router";
       };
     };
 
     domain = lib.mkOption {
       type = lib.types.str;
-      default = "vault.${
-          config.networking.fqdn or "${config.networking.hostName}.local"
-        }";
+      default = "vault.${config.networking.fqdn or "${config.networking.hostName}.local"}";
       defaultText = lib.literalExpression ''
         "vault.''${config.networking.fqdn or "''${config.networking.hostName}.local"}"
       '';
@@ -109,20 +114,26 @@ in {
   };
 
   config = mkIf cfg.enable {
-    lh.system.impermanence.persistentDirectories = [{
-      directory = "/var/lib/vaultwarden";
-      mode = "0700";
-      user = "vaultwarden";
-      group = "vaultwarden";
-    }];
+    lh.system.impermanence.persistentDirectories = [
+      {
+        directory = "/var/lib/vaultwarden";
+        mode = "0700";
+        user = "vaultwarden";
+        group = "vaultwarden";
+      }
+    ];
 
     lh.services.db.mysql = {
       enable = lib.mkDefault true;
       ensureDatabases = [ "vaultwarden" ];
-      ensureUsers = [{
-        name = "vaultwarden";
-        ensurePermissions = { "vaultwarden.*" = "ALL PRIVILEGES"; };
-      }];
+      ensureUsers = [
+        {
+          name = "vaultwarden";
+          ensurePermissions = {
+            "vaultwarden.*" = "ALL PRIVILEGES";
+          };
+        }
+      ];
     };
     systemd = {
 
@@ -144,7 +155,10 @@ in {
           ];
           BindPaths = [ "/var/lib/vaultwarden:/var/lib/vaultwarden" ];
 
-          ReadWritePaths = [ "/var/lib/vaultwarden" "/run/vaultwarden" ];
+          ReadWritePaths = [
+            "/var/lib/vaultwarden"
+            "/run/vaultwarden"
+          ];
           ReadOnlyPaths = [ "/nix/store" ];
 
         };
@@ -166,7 +180,9 @@ in {
         package = pkgsUnstable.vaultwarden-mysql;
         enable = true;
         dbBackend = "mysql";
-      } // (optionalAttrs (cfg.envFile != null) { envFile = cfg.envFile; }) // {
+      }
+      // (optionalAttrs (cfg.envFile != null) { envFile = cfg.envFile; })
+      // {
         config = {
           SIGNUPS_ALLOWED = cfg.allowSignups;
           DOMAIN = "https://${cfg.domain}";
@@ -174,25 +190,28 @@ in {
           ROCKET_PORT = "8222";
           ROCKET_LOG = "critical";
 
-          DATABASE_URL = "mysql://${cfg.database.user}@${cfg.database.host}:${
-              toString cfg.database.port
-            }/${cfg.database.database}";
+          DATABASE_URL = "mysql://${cfg.database.user}@${cfg.database.host}:${toString cfg.database.port}/${cfg.database.database}";
 
           ENABLE_WEBSOCKET = true;
-        } // (optionalAttrs (cfg.smtp.host != null) {
+        }
+        // (optionalAttrs (cfg.smtp.host != null) {
           SMTP_HOST = cfg.smtp.host;
-        }) // (optionalAttrs (cfg.smtp.port != null) {
+        })
+        // (optionalAttrs (cfg.smtp.port != null) {
           SMTP_PORT = toString cfg.smtp.port;
-        }) // (optionalAttrs (cfg.smtp.from != null) {
+        })
+        // (optionalAttrs (cfg.smtp.from != null) {
           SMTP_FROM = cfg.smtp.from;
-        }) // (optionalAttrs (cfg.smtp.from_name != null) {
+        })
+        // (optionalAttrs (cfg.smtp.from_name != null) {
           SMTP_FROM_NAME = cfg.smtp.from_name;
-        }) // (optionalAttrs cfg.smtp.ssl { SMTP_SSL = cfg.smtp.ssl; });
+        })
+        // (optionalAttrs cfg.smtp.ssl { SMTP_SSL = cfg.smtp.ssl; });
         webVaultPackage = pkgsUnstable.vaultwarden.webvault;
       };
       traefik.dynamicConfigOptions.http = mkIf cfg.traefikIntegration.enable {
         services.vaultwarden = {
-          loadBalancer.servers = [{ url = "http://127.0.8.222:8222"; }];
+          loadBalancer.servers = [ { url = "http://127.0.8.222:8222"; } ];
         };
         routers.vaultwarden = {
           rule = "Host(`${cfg.domain}`)";

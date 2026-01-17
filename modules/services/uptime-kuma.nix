@@ -1,13 +1,19 @@
-{ lib, config, options, pkgsUnstable, ... }:
-let cfg = config.lh.services.uptime-kuma;
-in {
+{
+  lib,
+  config,
+  options,
+  pkgsUnstable,
+  ...
+}:
+let
+  cfg = config.lh.services.uptime-kuma;
+in
+{
   options.lh.services.uptime-kuma = {
     enable = lib.mkEnableOption "uptime-kuma server";
     domain = lib.mkOption {
       type = lib.types.str;
-      default = "uptime-kuma.${
-          config.networking.fqdn or "${config.networking.hostName}.local"
-        }";
+      default = "uptime-kuma.${config.networking.fqdn or "${config.networking.hostName}.local"}";
       defaultText = lib.literalExpression ''
         "uptime-kuma.''${config.networking.fqdn or "''${config.networking.hostName}.local"}"
       '';
@@ -27,26 +33,24 @@ in {
             throw "You must set a certResolver if traefikIntegration is enabled"
           else
             "";
-        description =
-          "The certResolver to use for the uptime-kuma Traefik router";
+        description = "The certResolver to use for the uptime-kuma Traefik router";
         example = "le";
       };
 
       middlewares = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description =
-          "A list of middlewares to apply to the uptime-kuma Traefik router";
+        description = "A list of middlewares to apply to the uptime-kuma Traefik router";
       };
     };
   };
   config = lib.mkIf cfg.enable {
-    assertions = [{
-      assertion = cfg.traefikIntegration.enable
-        -> cfg.traefikIntegration.certResolver != "";
-      message =
-        "certResolver must be set when traefik integration is enabled for uptime-kuma";
-    }];
+    assertions = [
+      {
+        assertion = cfg.traefikIntegration.enable -> cfg.traefikIntegration.certResolver != "";
+        message = "certResolver must be set when traefik integration is enabled for uptime-kuma";
+      }
+    ];
 
     services.uptime-kuma = {
       enable = true;
@@ -76,12 +80,10 @@ in {
         rule = "Host(`${cfg.domain}`)";
         entryPoints = [ "websecure" ];
         service = "uptime-kuma";
-        middlewares = [ "securityheaders" ]
-          ++ cfg.traefikIntegration.middlewares;
+        middlewares = [ "securityheaders" ] ++ cfg.traefikIntegration.middlewares;
         tls = { inherit (cfg.traefikIntegration) certResolver; };
       };
-      http.services.uptime-kuma.loadBalancer.servers =
-        [{ url = "http://127.23.12.7:38412"; }];
+      http.services.uptime-kuma.loadBalancer.servers = [ { url = "http://127.23.12.7:38412"; } ];
     };
     users = {
 
@@ -98,8 +100,10 @@ in {
 
       services.uptime-kuma = {
         serviceConfig = {
-          ReadWritePaths =
-            [ "/var/lib/uptime-kuma" "/var/lib/private/uptime-kuma" ];
+          ReadWritePaths = [
+            "/var/lib/uptime-kuma"
+            "/var/lib/private/uptime-kuma"
+          ];
           ProtectSystem = lib.mkForce "strict";
           BindReadOnlyPaths = [
             "/etc/passwd"
@@ -115,7 +119,10 @@ in {
             # "/run/mysqld/mysqld.sock"
           ];
 
-          BindPaths = [ "/var/lib/uptime-kuma" "/var/lib/private/uptime-kuma" ];
+          BindPaths = [
+            "/var/lib/uptime-kuma"
+            "/var/lib/private/uptime-kuma"
+          ];
           MountAPIVFS = true;
 
           user = "uptime-kuma";
@@ -150,7 +157,10 @@ in {
         serviceName = "uptime-kuma";
         user = "uptime-kuma";
         group = "uptime-kuma";
-        dataPaths = [ "/var/lib/uptime-kuma" "/var/lib/private/uptime-kuma" ];
+        dataPaths = [
+          "/var/lib/uptime-kuma"
+          "/var/lib/private/uptime-kuma"
+        ];
       };
     };
   };

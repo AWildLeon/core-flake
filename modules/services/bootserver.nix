@@ -1,10 +1,17 @@
-{ lib, config, pkgs, ... }:
+{
+  lib,
+  config,
+  pkgs,
+  ...
+}:
 
 with lib;
 
-let cfg = config.lh.services.bootserver;
+let
+  cfg = config.lh.services.bootserver;
 
-in {
+in
+{
   options.lh.services.bootserver = {
     enable = mkEnableOption "PXE Boot Server with nginx and proxy DHCP";
 
@@ -27,8 +34,7 @@ in {
       interface = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description =
-          "Network interface to bind proxy DHCP to. If null, binds to all interfaces.";
+        description = "Network interface to bind proxy DHCP to. If null, binds to all interfaces.";
         example = "eth0";
       };
 
@@ -76,8 +82,7 @@ in {
       interface = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description =
-          "Network interface to bind TFTP to. If null, binds to all interfaces.";
+        description = "Network interface to bind TFTP to. If null, binds to all interfaces.";
         example = "eth0";
       };
     };
@@ -93,7 +98,11 @@ in {
         type = types.attrsOf types.attrs;
         default = { };
         description = "Additional nginx location blocks";
-        example = { "/custom/" = { alias = "/custom/path/"; }; };
+        example = {
+          "/custom/" = {
+            alias = "/custom/path/";
+          };
+        };
       };
     };
 
@@ -149,8 +158,8 @@ in {
         enable = true;
         exports = ''
           ${cfg.nfs.persistentDir} *(rw,sync,no_subtree_check,no_root_squash)
-        '' + optionalString (cfg.nfs.exports != [ ])
-          ("\n" + concatStringsSep "\n" cfg.nfs.exports);
+        ''
+        + optionalString (cfg.nfs.exports != [ ]) ("\n" + concatStringsSep "\n" cfg.nfs.exports);
       };
 
       # Enable required services for NFS
@@ -166,8 +175,8 @@ in {
           "--user=bootserver"
           "--group=bootserver"
           "--verbose=7"
-        ] ++ optionals (cfg.tftp.interface != null)
-          [ "--bind-address=${cfg.tftp.interface}" ];
+        ]
+        ++ optionals (cfg.tftp.interface != null) [ "--bind-address=${cfg.tftp.interface}" ];
       };
 
       # Proxy DHCP configuration (dnsmasq)
@@ -179,8 +188,7 @@ in {
           dhcp-range = cfg.proxyDhcp.dhcpRange;
 
           # Bind to specific interface if specified
-          interface =
-            mkIf (cfg.proxyDhcp.interface != null) cfg.proxyDhcp.interface;
+          interface = mkIf (cfg.proxyDhcp.interface != null) cfg.proxyDhcp.interface;
 
           # Enable TFTP server in dnsmasq if our TFTP is disabled
           enable-tftp = mkIf (!cfg.tftp.enable) true;
@@ -189,11 +197,9 @@ in {
           # PXE Boot configuration
           pxe-service = [
             ''tag:#ipxe,x86PC,"Boot from network",undionly.kpxe''
-            ''
-              tag:ipxe,x86PC,"Boot from network",http://${cfg.domain}/boot.ipxe''
+            ''tag:ipxe,x86PC,"Boot from network",http://${cfg.domain}/boot.ipxe''
             ''tag:#ipxe,x86-64_EFI,"Boot from network (UEFI)",snponly.efi''
-            ''
-              tag:ipxe,x86-64_EFI,"Boot from network (UEFI)",http://${cfg.domain}/boot.ipxe''
+            ''tag:ipxe,x86-64_EFI,"Boot from network (UEFI)",http://${cfg.domain}/boot.ipxe''
           ];
 
           # Enable PXE booting
@@ -271,10 +277,16 @@ in {
       packages.ipxe.enable = true;
 
       # Add directories to impermanence if available
-      system.impermanence.persistentDirectories = [{
-        directory = cfg.dataDir;
-        mode = "0755";
-      }] ++ optionals cfg.nfs.enable [ cfg.nfs.persistentDir "/var/lib/nfs" ];
+      system.impermanence.persistentDirectories = [
+        {
+          directory = cfg.dataDir;
+          mode = "0755";
+        }
+      ]
+      ++ optionals cfg.nfs.enable [
+        cfg.nfs.persistentDir
+        "/var/lib/nfs"
+      ];
     };
 
     # Create directory structure and default files
@@ -282,23 +294,42 @@ in {
       "d ${cfg.dataDir} 0755 bootserver bootserver"
       "d ${cfg.dataDir}/www 0755 bootserver bootserver"
       "d ${cfg.dataDir}/files 0755 bootserver bootserver"
-    ] ++ optionals cfg.nfs.enable
-      [ "d ${cfg.nfs.persistentDir} 0755 bootserver bootserver" ] ++ [
-        # Create symlinks to iPXE files in www root for HTTP access
-        "C+ ${cfg.dataDir}/www/undionly.kpxe - - - - ${pkgs.ipxe}/undionly.kpxe"
-        "C+ ${cfg.dataDir}/www/snponly.efi - - - - ${pkgs.ipxe}/snponly.efi"
-        "C+ ${cfg.dataDir}/www/undionly.kpxe.0 - - - - ${pkgs.ipxe}/undionly.kpxe"
-        "C+ ${cfg.dataDir}/www/ipxe.efi - - - - ${pkgs.ipxe}/ipxe.efi"
-        "C+ ${cfg.dataDir}/www/ipxe.usb - - - - ${pkgs.ipxe}/ipxe-efi.usb"
-      ];
+    ]
+    ++ optionals cfg.nfs.enable [ "d ${cfg.nfs.persistentDir} 0755 bootserver bootserver" ]
+    ++ [
+      # Create symlinks to iPXE files in www root for HTTP access
+      "C+ ${cfg.dataDir}/www/undionly.kpxe - - - - ${pkgs.ipxe}/undionly.kpxe"
+      "C+ ${cfg.dataDir}/www/snponly.efi - - - - ${pkgs.ipxe}/snponly.efi"
+      "C+ ${cfg.dataDir}/www/undionly.kpxe.0 - - - - ${pkgs.ipxe}/undionly.kpxe"
+      "C+ ${cfg.dataDir}/www/ipxe.efi - - - - ${pkgs.ipxe}/ipxe.efi"
+      "C+ ${cfg.dataDir}/www/ipxe.usb - - - - ${pkgs.ipxe}/ipxe-efi.usb"
+    ];
     networking = {
 
       # Firewall configuration
-      firewall.allowedTCPPorts = [ 80 ]
-        ++ optionals cfg.nfs.enable [ 111 2049 4000 4001 4002 ];
+      firewall.allowedTCPPorts = [
+        80
+      ]
+      ++ optionals cfg.nfs.enable [
+        111
+        2049
+        4000
+        4001
+        4002
+      ];
 
-      firewall.allowedUDPPorts = mkIf cfg.proxyDhcp.enable [ 67 69 ]
-        ++ optionals cfg.nfs.enable [ 111 2049 4000 4001 4002 ];
+      firewall.allowedUDPPorts =
+        mkIf cfg.proxyDhcp.enable [
+          67
+          69
+        ]
+        ++ optionals cfg.nfs.enable [
+          111
+          2049
+          4000
+          4001
+          4002
+        ];
     };
   };
 }

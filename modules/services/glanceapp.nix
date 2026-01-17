@@ -1,4 +1,11 @@
-{ lib, config, options, pkgs, ... }: {
+{
+  lib,
+  config,
+  options,
+  pkgs,
+  ...
+}:
+{
 
   options.lh.services.glance = {
     enable = lib.mkOption {
@@ -24,16 +31,14 @@
     assets-path = lib.mkOption {
       type = lib.types.str;
       default = "";
-      description =
-        "Path to the glance assets, if you want to override the default";
+      description = "Path to the glance assets, if you want to override the default";
       example = "/path/to/glance/assets";
     };
 
     environmentFiles = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
-      description =
-        "A list of environment files to include in the glance service";
+      description = "A list of environment files to include in the glance service";
     };
 
     traefikIntegration = {
@@ -45,26 +50,24 @@
 
       certResolver = lib.mkOption {
         type = lib.types.str;
-        default = if config.lh.services.glance.traefikIntegration.enable then
-          throw "You must set a certResolver if traefikIntegration is enabled"
-        else
-          "";
+        default =
+          if config.lh.services.glance.traefikIntegration.enable then
+            throw "You must set a certResolver if traefikIntegration is enabled"
+          else
+            "";
         description = "The certResolver to use for the glance Traefik router";
         example = "le";
       };
       middlewares = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description =
-          "A list of middlewares to apply to the glance Traefik router";
+        description = "A list of middlewares to apply to the glance Traefik router";
       };
     };
 
     domain = lib.mkOption {
       type = lib.types.str;
-      default = "glance.${
-          config.networking.fqdn or "${config.networking.hostName}.local"
-        }";
+      default = "glance.${config.networking.fqdn or "${config.networking.hostName}.local"}";
       defaultText = lib.literalExpression ''
         "glance.''${config.networking.fqdn or "''${config.networking.hostName}.local"}"
       '';
@@ -74,40 +77,39 @@
   };
 
   config = lib.mkIf config.lh.services.glance.enable {
-    assertions = [{
-      assertion = !(config.lh.services.glance.settings ? server);
-      message =
-        "config.lh.services.glance.settings.server is managed internally by this module. Please use the provided options like 'assets-path' instead of setting server configuration directly.";
-    }];
+    assertions = [
+      {
+        assertion = !(config.lh.services.glance.settings ? server);
+        message = "config.lh.services.glance.settings.server is managed internally by this module. Please use the provided options like 'assets-path' instead of setting server configuration directly.";
+      }
+    ];
 
-    lh.services.traefik.dynamicConfig =
-      lib.mkIf config.lh.services.glance.traefikIntegration.enable {
-        http.routers.glance = {
-          rule = "Host(`${config.lh.services.glance.domain}`)";
-          entryPoints = [ "websecure" ];
-          service = "glance";
+    lh.services.traefik.dynamicConfig = lib.mkIf config.lh.services.glance.traefikIntegration.enable {
+      http.routers.glance = {
+        rule = "Host(`${config.lh.services.glance.domain}`)";
+        entryPoints = [ "websecure" ];
+        service = "glance";
 
-          tls = {
-            inherit (config.lh.services.glance.traefikIntegration) certResolver;
+        tls = {
+          inherit (config.lh.services.glance.traefikIntegration) certResolver;
 
-            domains = [{
+          domains = [
+            {
               main = "onlh.de";
               sans = [ "*.onlh.de" ];
-            }];
-          };
-
-          middlewares = [ "securityheaders" ]
-            ++ config.lh.services.glance.traefikIntegration.middlewares;
+            }
+          ];
         };
-        http.services.glance.loadBalancer.servers =
-          [{ url = "unix+http:/run/glance/webui.sock"; }];
+
+        middlewares = [ "securityheaders" ] ++ config.lh.services.glance.traefikIntegration.middlewares;
       };
+      http.services.glance.loadBalancer.servers = [ { url = "unix+http:/run/glance/webui.sock"; } ];
+    };
 
     users = {
-      users.traefik =
-        lib.mkIf config.lh.services.glance.traefikIntegration.enable {
-          extraGroups = [ "glance" ];
-        };
+      users.traefik = lib.mkIf config.lh.services.glance.traefikIntegration.enable {
+        extraGroups = [ "glance" ];
+      };
 
       groups.glance = { };
       users.glance = {
@@ -134,24 +136,25 @@
 
         settings = {
           server = {
-            assets-path = if (config.lh.services.glance.assets-path != "") then
-              config.lh.services.glance.assets-path
-            else
-              "/var/lib/glance/assets";
+            assets-path =
+              if (config.lh.services.glance.assets-path != "") then
+                config.lh.services.glance.assets-path
+              else
+                "/var/lib/glance/assets";
             socket-path = "/run/glance/webui.sock";
             socket-mode = "0660";
             proxied = true;
           };
-        } // config.lh.services.glance.settings;
+        }
+        // config.lh.services.glance.settings;
       };
 
-      glance-ical-events =
-        lib.mkIf config.lh.services.glance.enableGlanceIcalEvents {
-          enable = true;
-          host = "127.80.76.90";
-          port = 8076;
-          workers = 1;
-        };
+      glance-ical-events = lib.mkIf config.lh.services.glance.enableGlanceIcalEvents {
+        enable = true;
+        host = "127.80.76.90";
+        port = 8076;
+        workers = 1;
+      };
     };
     systemd = {
       services = {
@@ -159,20 +162,26 @@
         traefik = lib.mkIf config.lh.services.glance.traefikIntegration.enable {
           requires = [ "glance.service" ];
           after = [ "glance.service" ];
-          serviceConfig = { BindReadOnlyPaths = [ "/run/glance/webui.sock" ]; };
+          serviceConfig = {
+            BindReadOnlyPaths = [ "/run/glance/webui.sock" ];
+          };
         };
 
         glance.serviceConfig = {
           User = "glance";
           Group = "glance";
 
-          RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+          RestrictAddressFamilies = [
+            "AF_UNIX"
+            "AF_INET"
+            "AF_INET6"
+          ];
           PrivateDevices = true;
           ProtectSystem = "strict";
 
-          EnvironmentFile =
-            lib.mkIf (config.lh.services.glance.environmentFiles != [ ])
-            config.lh.services.glance.environmentFiles;
+          EnvironmentFile = lib.mkIf (
+            config.lh.services.glance.environmentFiles != [ ]
+          ) config.lh.services.glance.environmentFiles;
 
           SystemCallFilter = [
             "~@privileged"
@@ -217,45 +226,53 @@
             "/etc/static/ssl"
             "/etc/passwd"
           ];
-          BindPaths =
-            [ "/var/lib/glance:/var/lib/glance" "/run/glance:/run/glance" ];
+          BindPaths = [
+            "/var/lib/glance:/var/lib/glance"
+            "/run/glance:/run/glance"
+          ];
 
-          ReadWritePaths = [ "/var/lib/glance" "/run/glance" ];
+          ReadWritePaths = [
+            "/var/lib/glance"
+            "/run/glance"
+          ];
           ReadOnlyPaths = [ "/nix/store" ];
 
         };
 
-        "glance-ical-events".serviceConfig =
-          lib.mkIf config.lh.services.glance.enableGlanceIcalEvents {
-            RootDirectory = "/run/jails/glance-ical-events";
-            BindReadOnlyPaths = [
-              "/nix/store"
-              "/etc/ssl"
-              "/etc/resolv.conf"
-              "/etc/hosts"
-              "/run/current-system/sw/bin"
-              "/run/wrappers/bin"
-              "/etc/static/ssl"
-              "/etc/passwd"
-            ];
+        "glance-ical-events".serviceConfig = lib.mkIf config.lh.services.glance.enableGlanceIcalEvents {
+          RootDirectory = "/run/jails/glance-ical-events";
+          BindReadOnlyPaths = [
+            "/nix/store"
+            "/etc/ssl"
+            "/etc/resolv.conf"
+            "/etc/hosts"
+            "/run/current-system/sw/bin"
+            "/run/wrappers/bin"
+            "/etc/static/ssl"
+            "/etc/passwd"
+          ];
 
-            ReadOnlyPaths = [ "/nix/store" ];
+          ReadOnlyPaths = [ "/nix/store" ];
 
-          };
+        };
       };
 
-      tmpfiles.rules = config.lh.lib.mkJailTmpfiles {
-        serviceName = "glance";
-        user = "glance";
-        group = "glance";
-      } ++ (if config.lh.services.glance.enableGlanceIcalEvents then
+      tmpfiles.rules =
         config.lh.lib.mkJailTmpfiles {
-          serviceName = "glance-ical-events";
-          user = "glance-ical-events";
-          group = "glance-ical-events";
+          serviceName = "glance";
+          user = "glance";
+          group = "glance";
         }
-      else
-        [ ]);
+        ++ (
+          if config.lh.services.glance.enableGlanceIcalEvents then
+            config.lh.lib.mkJailTmpfiles {
+              serviceName = "glance-ical-events";
+              user = "glance-ical-events";
+              group = "glance-ical-events";
+            }
+          else
+            [ ]
+        );
     };
 
   };

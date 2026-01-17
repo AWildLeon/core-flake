@@ -2,8 +2,10 @@
 
 with lib;
 
-let cfg = config.lh.router.staticInterfaceNames;
-in {
+let
+  cfg = config.lh.router.staticInterfaceNames;
+in
+{
   options.lh.router.staticInterfaceNames = {
     interfaces = mkOption {
       type = types.attrsOf types.str;
@@ -21,9 +23,11 @@ in {
   };
 
   config = mkIf (cfg.interfaces != { }) {
-    services.udev.extraRules = concatStringsSep "\n" (mapAttrsToList (mac: name:
-      ''
-        SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="${mac}", NAME="${name}"'')
-      cfg.interfaces);
+    services.udev.extraRules = concatStringsSep "\n" (
+      mapAttrsToList (
+        mac: name:
+        ''SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="${mac}", NAME="${name}"''
+      ) cfg.interfaces
+    );
   };
 }

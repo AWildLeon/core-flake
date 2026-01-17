@@ -1,8 +1,15 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
-let cfg = config.lh.services.nameserver;
+let
+  cfg = config.lh.services.nameserver;
 
-in {
+in
+{
   imports = [ ];
 
   options.lh.services.nameserver = {
@@ -31,27 +38,25 @@ in {
             throw "You must set a certResolver if traefikIntegration is enabled"
           else
             "";
-        description =
-          "The certResolver to use for the nameserver Traefik router";
+        description = "The certResolver to use for the nameserver Traefik router";
         example = "le";
       };
 
       middlewares = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description =
-          "A list of middlewares to apply to the nameserver Traefik router";
+        description = "A list of middlewares to apply to the nameserver Traefik router";
       };
     };
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [{
-      assertion = cfg.traefikIntegration.enable
-        -> cfg.traefikIntegration.certResolver != "";
-      message =
-        "certResolver must be set when traefik integration is enabled for nameserver";
-    }];
+    assertions = [
+      {
+        assertion = cfg.traefikIntegration.enable -> cfg.traefikIntegration.certResolver != "";
+        message = "certResolver must be set when traefik integration is enabled for nameserver";
+      }
+    ];
 
     services.technitium-dns-server = {
       enable = true;
@@ -76,12 +81,10 @@ in {
         rule = "Host(`${cfg.fqdn}`)";
         entryPoints = [ "websecure" ];
         service = "nameserver";
-        middlewares = [ "securityheaders" ]
-          ++ cfg.traefikIntegration.middlewares;
+        middlewares = [ "securityheaders" ] ++ cfg.traefikIntegration.middlewares;
         tls = { inherit (cfg.traefikIntegration) certResolver; };
       };
-      http.services.nameserver.loadBalancer.servers =
-        [{ url = "http://127.0.0.1:5380"; }];
+      http.services.nameserver.loadBalancer.servers = [ { url = "http://127.0.0.1:5380"; } ];
     };
 
     # systemd-Overrides für die Unit
@@ -89,8 +92,7 @@ in {
       # Use /var/lib/nameserver instead of the default technitium-dns-server
       StateDirectory = lib.mkForce "nameserver";
       WorkingDirectory = lib.mkForce "/var/lib/nameserver";
-      ExecStart = lib.mkForce
-        "${pkgs.technitium-dns-server}/bin/technitium-dns-server /var/lib/nameserver";
+      ExecStart = lib.mkForce "${pkgs.technitium-dns-server}/bin/technitium-dns-server /var/lib/nameserver";
       # Disable DynamicUser to avoid conflicts with existing directory
       DynamicUser = lib.mkForce false;
       # Set a specific user instead
@@ -101,11 +103,13 @@ in {
     };
 
     # Persistenz via impermanence
-    environment = lib.optionalAttrs (builtins.hasAttr "environment" config
-      && builtins.hasAttr "persistence" config.environment) {
-        persistence."/persistent" = {
-          directories = [ "/var/lib/nameserver" ];
+    environment =
+      lib.optionalAttrs
+        (builtins.hasAttr "environment" config && builtins.hasAttr "persistence" config.environment)
+        {
+          persistence."/persistent" = {
+            directories = [ "/var/lib/nameserver" ];
+          };
         };
-      };
   };
 }

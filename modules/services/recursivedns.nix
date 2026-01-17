@@ -1,4 +1,10 @@
-{ lib, config, pkgs, ... }: {
+{
+  lib,
+  config,
+  pkgs,
+  ...
+}:
+{
   options.lh.services.recursivedns = {
     enable = lib.mkEnableOption "DNS services (unbound + dnsdist)";
   };
@@ -14,7 +20,10 @@
       LockPersonality = true;
       RestrictSUIDSGID = true;
       RestrictNamespaces = true;
-      SystemCallFilter = [ "@system-service" "~@privileged" ];
+      SystemCallFilter = [
+        "@system-service"
+        "~@privileged"
+      ];
     };
 
     # Generate unbound cookie secret on boot
@@ -25,8 +34,7 @@
       serviceConfig = {
         Type = "oneshot";
         ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p /var/lib/unbound";
-        ExecStart =
-          "${pkgs.bash}/bin/bash -c '${pkgs.openssl}/bin/openssl rand -hex 16 > /var/lib/unbound/cookie-secret'";
+        ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.openssl}/bin/openssl rand -hex 16 > /var/lib/unbound/cookie-secret'";
         User = "unbound";
         Group = "unbound";
       };
@@ -38,10 +46,12 @@
       nscd.enableNsncd = false;
       unbound = {
         enable = true;
-        resolveLocalQueries =
-          false; # Disable local resolution to avoid conflicts with DNSdist
+        resolveLocalQueries = false; # Disable local resolution to avoid conflicts with DNSdist
         settings.server = {
-          interface = [ "127.0.0.1@5300" "::1@5300" ];
+          interface = [
+            "127.0.0.1@5300"
+            "::1@5300"
+          ];
           #   interface-automatic = false;
 
           do-ip6 = true;
